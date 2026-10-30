@@ -135,7 +135,7 @@ def generate_study_guide_workflow(
                 document_id=chunk.document_id,
             )
             meta = f"(Chunk {chunk.chunk_index}"
-            if chunk.page_number != -1:
+            if chunk.page_number is not None and chunk.page_number > 0:
                 meta += f", Page {chunk.page_number}"
             meta += f", {chunk.filename})"
             context_parts.append(f"[{label}] {meta}\n{chunk.text}")
@@ -409,20 +409,75 @@ def _mock_section_output(section_plan: SectionPlan, source_map: Dict[str, Source
                 words = [w for w in re.findall(r"[A-Za-z0-9]+", sent) if len(w) > 3]
                 short_title = " ".join(words[:4]).title() if words else f"Key Point {idx + 1}"
                 ref_obj = source_map.get(lbl)
+                page_str = f" (Page {ref_obj.page_number})" if ref_obj and (ref_obj.page_number or 0) > 0 else ""
                 add_info = (
-                    f"Extracted from {ref_obj.filename}"
-                    + (f" (Page {ref_obj.page_number})" if ref_obj and ref_obj.page_number > 0 else "")
+                    f"Extracted from {ref_obj.filename}{page_str}"
                     if ref_obj
                     else "Grounded in source document."
                 )
-                items.append(
-                    {
-                        "title": short_title,
-                        "content": sent,
-                        "additional_info": add_info,
-                        "source_labels": [lbl],
-                    }
-                )
+
+                if sec_type == "practice_questions":
+                    q_title = f"What is the core principle regarding '{short_title}'?"
+                    q_options = (
+                        f"A) {sent}\n"
+                        f"B) It is obsolete in current operational environments\n"
+                        f"C) It only applies to unrelated external domains\n"
+                        f"D) None of the above"
+                    )
+                    q_info = f"Correct Answer: A) {sent}\n\nExplanation: Grounded in {ref_obj.filename if ref_obj else 'source document'}{page_str}."
+                    items.append(
+                        {
+                            "title": q_title,
+                            "content": q_options,
+                            "additional_info": q_info,
+                            "source_labels": [lbl],
+                        }
+                    )
+                elif sec_type == "definitions":
+                    items.append(
+                        {
+                            "title": short_title,
+                            "content": f"Formal concept definition: {sent}",
+                            "additional_info": add_info,
+                            "source_labels": [lbl],
+                        }
+                    )
+                elif sec_type == "processes":
+                    items.append(
+                        {
+                            "title": f"Process Step {idx + 1}: {short_title}",
+                            "content": sent,
+                            "additional_info": add_info,
+                            "source_labels": [lbl],
+                        }
+                    )
+                elif sec_type == "misconceptions":
+                    items.append(
+                        {
+                            "title": f"Common Misunderstanding of {short_title}",
+                            "content": f"Misconception: Assuming this is optional or trivial.\nFact: {sent}",
+                            "additional_info": add_info,
+                            "source_labels": [lbl],
+                        }
+                    )
+                elif sec_type == "review_points":
+                    items.append(
+                        {
+                            "title": f"High-Value Review Fact: {short_title}",
+                            "content": sent,
+                            "additional_info": add_info,
+                            "source_labels": [lbl],
+                        }
+                    )
+                else:
+                    items.append(
+                        {
+                            "title": short_title,
+                            "content": sent,
+                            "additional_info": add_info,
+                            "source_labels": [lbl],
+                        }
+                    )
             payload = {
                 "section_type": sec_type,
                 "section_title": section_plan.title,

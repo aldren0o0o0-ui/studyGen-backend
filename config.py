@@ -52,7 +52,7 @@ class Settings(BaseSettings):
     chroma_collection_name: str = "study_material"
 
     # AI / embeddings
-    gemini_model: str = "gemini-2.5-flash"
+    gemini_model: str = "gemini-flash-latest"
 
     # Context budget (characters)
     max_context_chars: int = 12_000

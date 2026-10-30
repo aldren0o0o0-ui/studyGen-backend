@@ -152,7 +152,7 @@ def generate_flashcards_from_document(
                 document_id=resolved_doc_ids[0],
             )
             meta = f"(Chunk {chunk.chunk_index}"
-            if chunk.page_number != -1:
+            if chunk.page_number is not None and chunk.page_number > 0:
                 meta += f", Page {chunk.page_number}"
             meta += f", {chunk.filename})"
             parts.append(f"[{label}] {meta}\n{chunk.text}")
@@ -175,7 +175,7 @@ def generate_flashcards_from_document(
                 document_id=chunk.document_id,
             )
             meta = f"(Chunk {chunk.chunk_index}"
-            if chunk.page_number != -1:
+            if chunk.page_number is not None and chunk.page_number > 0:
                 meta += f", Page {chunk.page_number}"
             meta += f", {chunk.filename})"
             parts.append(f"[{label}] {meta}\n{chunk.text}")
