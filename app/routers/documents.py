@@ -739,6 +739,25 @@ async def get_document_page_diagnostics(
                         }
                     )
 
+            if not res_pages and doc.file_path and Path(doc.file_path).exists():
+                try:
+                    ext_res = extract_document_hybrid(doc.file_path, doc.original_filename or "")
+                    if ext_res.sections:
+                        for s_idx, sec in enumerate(ext_res.sections):
+                            res_pages.append(
+                                {
+                                    "page_number": sec.page_number or (s_idx + 1),
+                                    "extraction_method": ext_res.extraction_method or doc.extraction_method or "native",
+                                    "status": "OK",
+                                    "character_count": len(sec.text),
+                                    "quality_score": float(doc.quality_score or 1.0),
+                                    "section_label": getattr(sec, "section_title", None) or f"Page {s_idx + 1}",
+                                    "content": sec.text,
+                                }
+                            )
+                except Exception as ex:
+                    logger.warning("Disk extraction fallback failed for reader: %s", ex)
+
             return {
                 "document_id": document_id,
                 "pages": res_pages,
