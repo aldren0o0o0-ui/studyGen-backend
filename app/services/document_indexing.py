@@ -90,7 +90,14 @@ def index_document(
     _delete_document_chunks(collection, document_id)
 
     try:
-        collection.add(documents=documents, ids=ids, metadatas=metadatas)
+        batch_size = 8
+        for start_idx in range(0, len(documents), batch_size):
+            end_idx = start_idx + batch_size
+            collection.add(
+                documents=documents[start_idx:end_idx],
+                ids=ids[start_idx:end_idx],
+                metadatas=metadatas[start_idx:end_idx],
+            )
     except Exception as exc:
         # Rollback partial writes
         _delete_document_chunks(collection, document_id)

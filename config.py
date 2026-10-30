@@ -52,7 +52,7 @@ class Settings(BaseSettings):
     chroma_collection_name: str = "study_material"
 
     # AI / embeddings
-    gemini_model: str = "gemini-3.6-flash"
+    gemini_model: str = "gemini-2.5-flash"
 
     # Context budget (characters)
     max_context_chars: int = 12_000
@@ -125,7 +125,7 @@ class Settings(BaseSettings):
     ocr_invalid_character_ratio: float = 0.15
     ocr_max_pages_per_document: int = 100
     ocr_max_page_pixels: int = 25_000_000
-    ocr_render_dpi: int = 150
+    ocr_render_dpi: int = 120
     ocr_page_timeout_seconds: int = 10
     ocr_document_timeout_seconds: int = 60
     chunk_min_characters: int = 50

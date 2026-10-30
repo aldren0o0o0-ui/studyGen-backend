@@ -377,11 +377,60 @@ def get_study_guide_detail(db: Session, guide_id: str, user_id: str) -> StudyGui
 
 
 def _mock_section_output(section_plan: SectionPlan, source_map: Dict[str, SourceReference]) -> str:
-    """Mock JSON generator for tests and fallbacks."""
+    """Mock JSON generator for tests and extractive fallback when provider is unavailable."""
     import json
+    import os
+    import re
+
     source_labels = list(source_map.keys())[:2] or ["SOURCE_1"]
     labels_json = json.dumps(source_labels)
     sec_type = section_plan.section_type
+
+    is_testing = os.getenv("TESTING", "").lower() in ("1", "true", "yes")
+    if not is_testing and source_map:
+        excerpts: List[tuple[str, SourceReference]] = list(source_map.items())
+        sentences: List[tuple[str, str]] = []
+        for lbl, ref in excerpts:
+            cleaned = re.sub(r"\s+", " ", (ref.excerpt or "").strip())
+            if not cleaned:
+                continue
+            for part in re.split(r"(?<=[.!?])\s+", cleaned):
+                part = part.strip()
+                if len(part) >= 25:
+                    sentences.append((lbl, part))
+            if not sentences and len(cleaned) >= 20:
+                sentences.append((lbl, cleaned))
+
+        if sentences:
+            summary_sents = [s for _, s in sentences[:3]]
+            summary_text = " ".join(summary_sents)
+            items = []
+            for idx, (lbl, sent) in enumerate(sentences[:4]):
+                words = [w for w in re.findall(r"[A-Za-z0-9]+", sent) if len(w) > 3]
+                short_title = " ".join(words[:4]).title() if words else f"Key Point {idx + 1}"
+                ref_obj = source_map.get(lbl)
+                add_info = (
+                    f"Extracted from {ref_obj.filename}"
+                    + (f" (Page {ref_obj.page_number})" if ref_obj and ref_obj.page_number > 0 else "")
+                    if ref_obj
+                    else "Grounded in source document."
+                )
+                items.append(
+                    {
+                        "title": short_title,
+                        "content": sent,
+                        "additional_info": add_info,
+                        "source_labels": [lbl],
+                    }
+                )
+            payload = {
+                "section_type": sec_type,
+                "section_title": section_plan.title,
+                "insufficient_evidence": False,
+                "summary_markdown": summary_text,
+                "items": items,
+            }
+            return json.dumps(payload)
 
     if sec_type == "overview":
         return f"""{{
