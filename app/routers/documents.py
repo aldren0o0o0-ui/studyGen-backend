@@ -667,6 +667,7 @@ async def get_document_processing_diagnostics(
 @router.get("/{document_id}/pages")
 async def get_document_page_diagnostics(
     document_id: str,
+    request: Request,
     current_user: CurrentUser = Depends(get_current_user),
 ):
     def _query():
@@ -676,18 +677,73 @@ async def get_document_page_diagnostics(
             if not doc:
                 raise HTTPException(404, f"Document '{document_id}' not found.")
             pages = document_service.get_document_pages(db, document_id)
-            res_pages = [
-                {
-                    "page_number": p.page_number,
-                    "extraction_method": p.extraction_method,
-                    "status": p.status,
-                    "character_count": p.character_count,
-                    "quality_score": p.quality_score,
-                    "section_label": p.section_label,
-                }
-                for p in pages
-            ]
-            return {"document_id": document_id, "pages": res_pages, "total_pages": len(res_pages)}
+
+            collection = getattr(request.app.state, "collection", None)
+            page_text_map: Dict[int, List[Tuple[int, str]]] = {}
+            all_chunks: List[Tuple[int, str, Optional[str]]] = []
+
+            if collection is not None:
+                try:
+                    where_filter: Dict[str, Any] = {"document_id": document_id}
+                    chroma_res = collection.get(
+                        where=where_filter,
+                        include=["documents", "metadatas"],
+                    )
+                    docs_list = chroma_res.get("documents") or []
+                    metas_list = chroma_res.get("metadatas") or []
+                    for chunk_txt, meta in zip(docs_list, metas_list):
+                        if not chunk_txt:
+                            continue
+                        c_idx = int(meta.get("chunk_index", 0))
+                        p_num = meta.get("page_number")
+                        sec_label = meta.get("section_title") or meta.get("section_path")
+                        p_val = int(p_num) if isinstance(p_num, (int, float)) and int(p_num) > 0 else 1
+                        page_text_map.setdefault(p_val, []).append((c_idx, str(chunk_txt)))
+                        all_chunks.append((c_idx, str(chunk_txt), sec_label))
+                except Exception as exc:
+                    logger.warning("Could not fetch Chroma chunks for reader: %s", exc)
+
+            res_pages = []
+            if pages:
+                for p in pages:
+                    chunks_for_page = sorted(page_text_map.get(p.page_number, []), key=lambda x: x[0])
+                    p_content = "\n\n".join(t for _, t in chunks_for_page) if chunks_for_page else ""
+                    res_pages.append(
+                        {
+                            "page_number": p.page_number,
+                            "extraction_method": p.extraction_method,
+                            "status": p.status,
+                            "character_count": p.character_count or len(p_content),
+                            "quality_score": p.quality_score,
+                            "section_label": p.section_label,
+                            "content": p_content,
+                        }
+                    )
+            elif all_chunks:
+                all_chunks.sort(key=lambda x: x[0])
+                chunks_per_virtual_page = 3
+                for v_idx in range(0, len(all_chunks), chunks_per_virtual_page):
+                    slice_chunks = all_chunks[v_idx : v_idx + chunks_per_virtual_page]
+                    v_content = "\n\n".join(t for _, t, _ in slice_chunks)
+                    v_page_num = (v_idx // chunks_per_virtual_page) + 1
+                    first_sec = slice_chunks[0][2] if slice_chunks else None
+                    res_pages.append(
+                        {
+                            "page_number": v_page_num,
+                            "extraction_method": doc.extraction_method or "native",
+                            "status": "OK",
+                            "character_count": len(v_content),
+                            "quality_score": float(doc.quality_score or 1.0),
+                            "section_label": first_sec or f"Section {v_page_num}",
+                            "content": v_content,
+                        }
+                    )
+
+            return {
+                "document_id": document_id,
+                "pages": res_pages,
+                "total_pages": len(res_pages) if res_pages else 1,
+            }
         finally:
             db.close()
 
